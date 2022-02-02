@@ -104,7 +104,7 @@ static NtCloseFunc *NtClose;
 #define MDB_THR_T	pthread_t
 #include <sys/param.h>
 #include <sys/uio.h>
-#include <sys/mman.h>
+#include <umap.h>
 #ifdef HAVE_SYS_FILE_H
 #include <sys/file.h>
 #endif
@@ -536,7 +536,7 @@ static int mdb_mutex_failed(MDB_env *env, mdb_mutexref_t mutex, int rc);
 #endif
 
 #ifndef MDB_MSYNC
-# define MDB_MSYNC(addr,len,flags)	msync(addr,len,flags)
+# define MDB_MSYNC(addr,len,flags)	umap_flush() // msync(addr,len,flags)
 #endif
 
 #ifndef MS_SYNC
@@ -4503,7 +4503,7 @@ mdb_env_map(MDB_env *env, void *addr)
 		return mdb_nt2win32(rc);
 	env->me_map = map;
 #else
-	int mmap_flags = MAP_SHARED;
+	int mmap_flags = MAP_PRIVATE;
 	int prot = PROT_READ;
 #ifdef MAP_NOSYNC	/* Used on FreeBSD */
 	if (flags & MDB_NOSYNC)
@@ -4523,7 +4523,7 @@ mdb_env_map(MDB_env *env, void *addr)
 		if (ftruncate(env->me_fd, env->me_mapsize) < 0)
 			return ErrCode();
 	}
-	env->me_map = mmap(addr, env->me_mapsize, prot, mmap_flags,
+	env->me_map = umap(addr, env->me_mapsize, prot, mmap_flags,
 		env->me_fd, 0);
 	if (env->me_map == MAP_FAILED) {
 		env->me_map = NULL;
@@ -4585,7 +4585,7 @@ mdb_env_set_mapsize(MDB_env *env, mdb_size_t size)
 		/* For MDB_VL32 this bit is a noop since we dynamically remap
 		 * chunks of the DB anyway.
 		 */
-		munmap(env->me_map, env->me_mapsize);
+		uunmap(env->me_map, env->me_mapsize);
 		env->me_mapsize = size;
 		old = (env->me_flags & MDB_FIXEDMAP) ? env->me_map : NULL;
 		rc = mdb_env_map(env, old);
@@ -5735,7 +5735,7 @@ mdb_env_close0(MDB_env *env, int excl)
 #ifdef MDB_VL32
 		munmap(env->me_map, NUM_METAS*env->me_psize);
 #else
-		munmap(env->me_map, env->me_mapsize);
+		uunmap(env->me_map, env->me_mapsize);
 #endif
 	}
 	if (env->me_mfd != INVALID_HANDLE_VALUE)
